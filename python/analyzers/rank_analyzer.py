@@ -68,10 +68,12 @@ class RankAnalyzer:
             }
             gainers.append(entry)
 
-        # 하락 TOP N
+        # 하락 TOP N (change_rate < 0인 것만)
         by_loss = sorted(filtered, key=lambda x: x.get("change_rate", 0))
         losers = []
-        for s in by_loss[:TOP_N]:
+        for s in by_loss:
+            if s.get("change_rate", 0) >= 0:
+                continue
             entry = {
                 "code": s["code"],
                 "name": s.get("name", ""),
@@ -81,6 +83,11 @@ class RankAnalyzer:
                 "news": stock_news.get(s["code"], []),
             }
             losers.append(entry)
+            if len(losers) >= TOP_N:
+                break
+
+        if not losers:
+            logger.warning("하락 종목 0건 — 모든 종목의 change_rate >= 0")
 
         logger.info(
             f"등락률 분석 완료: 상승 {len(gainers)}건, 하락 {len(losers)}건"

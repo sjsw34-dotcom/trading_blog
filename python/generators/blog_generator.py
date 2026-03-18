@@ -1,4 +1,8 @@
-"""Claude API 블로그 글 생성 모듈 — 아침 브리핑 / 마감 리포트"""
+"""Claude API 블로그 글 생성 모듈 — 아침 브리핑 / 마감 리포트
+
+변경: JSON 감싸기 제거 → HTML 직접 출력 + 제목/메타 별도 경량 호출
+등락 해설, 공시 요약을 블로그 생성 프롬프트에 합쳐 호출 횟수 축소
+"""
 
 import json
 import logging
@@ -77,6 +81,11 @@ CLOSING_SYSTEM = """\
 - 테이블은 <div class="table-wrapper"><table>...</table></div>로 감싸기
 - 깔끔한 시맨틱 HTML. 인라인 스타일 최소화.
 - 충분한 분량. 최소 3000자 이상.
+
+## 중요: 출력 형식
+- <article> 태그로 감싸진 HTML만 출력하세요.
+- JSON으로 감싸지 마세요.
+- 제목, 메타 설명 등 다른 텍스트 없이 HTML만.
 """
 
 CLOSING_USER = """\
@@ -85,14 +94,17 @@ CLOSING_USER = """\
 ## 시장 데이터
 {market_data}
 
-## 상승/하락 TOP 15 + 해설
-{rank_commentary}
+## 상승 종목 TOP 15 (등락률 순위 데이터 + 관련 뉴스)
+{rank_data}
+
+## 하락 종목 TOP 15 (등락률 순위 데이터 + 관련 뉴스)
+→ 위 rank_data의 losers 참고
 
 ## 테마 분류
 {themes}
 
-## 공시 요약
-{disclosure_summary}
+## 공시 원본 데이터 (카테고리별 정리 + 요약 작성 필요)
+{disclosures}
 
 ## 수급 데이터
 {supply}
@@ -109,13 +121,37 @@ CLOSING_USER = """\
 ---
 
 위 모든 데이터를 활용하여 장 마감 리포트를 작성해주세요.
+- 상승/하락 종목의 사유는 관련 뉴스를 참고하여 직접 해설
+- 공시 데이터는 개인투자자가 이해하기 쉽게 요약
 - 뉴스 링크는 반드시 원본 URL을 그대로 사용
 - 데이터가 비어있는 섹션도 "데이터 없음"으로 표시
-- 제목: "{today} 주식 시장 마감 리포트 — [오늘의 핵심 키워드]"
 - 면책 문구: {disclaimer}
 
-JSON 형식으로만 응답 (마크다운 코드블록 없이):
-{{"title": "제목", "content": "<article>전체 HTML</article>", "meta_description": "300자 이내 SEO 설명"}}
+<article> 태그로 감싸진 HTML만 출력하세요. 다른 텍스트 없이.
+"""
+
+# ── 제목/메타 추출 프롬프트 (경량) ──────────────────
+
+TITLE_META_PROMPT = """\
+아래 블로그 글의 제목과 SEO 메타 설명을 추출해주세요.
+
+날짜: {today}
+본문 첫 500자:
+{content_preview}
+
+JSON으로만 응답 (마크다운 코드블록 없이):
+{{"title": "{today} 주식 시장 마감 리포트 — [오늘의 핵심 키워드]", "meta_description": "300자 이내 SEO 설명"}}
+"""
+
+MORNING_TITLE_META_PROMPT = """\
+아래 블로그 글의 제목과 SEO 메타 설명을 추출해주세요.
+
+날짜: {today}
+본문 첫 500자:
+{content_preview}
+
+JSON으로만 응답 (마크다운 코드블록 없이):
+{{"title": "{today} 미국장 마감 브리핑 — [핵심 키워드]", "meta_description": "300자 이내 SEO 설명"}}
 """
 
 # ── 아침 브리핑 프롬프트 ───────────────────────────
@@ -156,6 +192,10 @@ MORNING_SYSTEM = """\
 - 뉴스 링크: <a href="URL">제목(언론사)</a>
 - 상승: <span class="stock-up">, 하락: <span class="stock-down">
 - 충분한 분량. 최소 2000자 이상.
+
+## 중요: 출력 형식
+- <article> 태그로 감싸진 HTML만 출력하세요.
+- JSON으로 감싸지 마세요.
 """
 
 MORNING_USER = """\
@@ -178,46 +218,20 @@ MORNING_USER = """\
 위 모든 데이터를 활용하여 아침 브리핑을 작성해주세요.
 - 뉴스 링크는 반드시 원본 URL 그대로 사용
 - 데이터가 비어있으면 "데이터 없음"으로 표시
-- 제목: "{today} 미국장 마감 브리핑 — [핵심 키워드]"
 - 면책 문구: {disclaimer}
 
-JSON 형식으로만 응답 (마크다운 코드블록 없이):
-{{"title": "제목", "content": "<article>전체 HTML</article>", "meta_description": "300자 이내 SEO 설명"}}
-"""
-
-# ── 개별 섹션 프롬프트 ────────────────────────────
-
-RANK_COMMENTARY_PROMPT = """\
-아래 상승/하락 종목 데이터와 관련 뉴스를 바탕으로,
-각 종목이 왜 올랐거나 내렸는지 1~2줄 해설을 작성해주세요.
-- 같은 테마(이유)로 움직인 종목은 묶어서 표시
-- 투자 조언 금지, 팩트만
-- '오를 것이다' 표현 금지
-
-데이터:
-{rank_data}
-
-JSON으로 응답:
-{{"gainers": [{{"code": "종목코드", "name": "종목명", "change_rate": 5.2, "comment": "해설", "theme": "테마명"}}],
- "losers": [{{"code": "종목코드", "name": "종목명", "change_rate": -3.1, "comment": "해설", "theme": "테마명"}}]}}
-"""
-
-DISCLOSURE_SUMMARY_PROMPT = """\
-아래 공시 데이터를 한국 개인투자자가 이해하기 쉽게 요약해주세요.
-- 각 공시가 왜 중요한지, 주가에 어떤 영향이 있었는지(과거형) 한 줄씩
-- 카테고리별로 묶어서 정리
-- 투자 조언 금지, 팩트만
-
-데이터:
-{disclosure_data}
-
-JSON으로 응답:
-{{"summaries": [{{"corp_name": "기업명", "title": "공시 제목", "comment": "한줄 요약", "category": "카테고리", "url": "URL"}}]}}
+<article> 태그로 감싸진 HTML만 출력하세요. 다른 텍스트 없이.
 """
 
 
 class BlogGenerator:
-    """Claude API로 블로그 글 생성"""
+    """Claude API로 블로그 글 생성
+
+    호출 구조 (마감 리포트):
+    1. 테마 분류 — ThemeAnalyzer에서 처리 (별도)
+    2. HTML 본문 직접 생성 (1회, 등락 해설+공시 요약 합침)
+    3. 제목+메타 추출 (1회, 경량 ~500토큰)
+    """
 
     def __init__(self):
         self.client = anthropic.Anthropic(
@@ -225,6 +239,7 @@ class BlogGenerator:
         )
 
     def _call_claude(self, system: str, user_content: str, max_tokens: int = 4000) -> str:
+        """Claude API 호출 → 텍스트 반환"""
         response = self.client.messages.create(
             model=MODEL,
             max_tokens=max_tokens,
@@ -233,72 +248,36 @@ class BlogGenerator:
         )
         return response.content[0].text.strip()
 
-    def _call_claude_json(self, prompt: str, max_tokens: int = 4000, retries: int = 2) -> dict:
-        """Claude API 호출 → JSON 파싱 (실패 시 재시도)"""
-        last_error = None
-        for attempt in range(retries):
-            response = self.client.messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = response.content[0].text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1]
-                raw = raw.rsplit("```", 1)[0]
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError as e:
-                last_error = e
-                logger.warning(f"JSON 파싱 실패 (시도 {attempt + 1}/{retries}): {e}")
-                prompt = prompt + "\n\n반드시 유효한 JSON만 출력하세요. 마크다운 코드블록 없이, JSON 외 다른 텍스트 없이."
-        raise last_error
-
-    def _call_claude_json_with_system(
-        self, system: str, user_content: str, max_tokens: int = 8000, retries: int = 2
-    ) -> dict:
-        """system + user 분리 호출 → JSON 파싱"""
-        last_error = None
-        for attempt in range(retries):
-            response = self.client.messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user_content}],
-            )
-            raw = response.content[0].text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1]
-                raw = raw.rsplit("```", 1)[0]
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError as e:
-                last_error = e
-                logger.warning(f"JSON 파싱 실패 (시도 {attempt + 1}/{retries}): {e}")
-                user_content = user_content + "\n\n반드시 유효한 JSON만 출력하세요."
-        raise last_error
-
-    # ── 개별 섹션 생성 ────────────────────────────────
-
-    def generate_rank_commentary(self, rank_data: dict) -> dict:
-        prompt = RANK_COMMENTARY_PROMPT.format(
-            rank_data=json.dumps(rank_data, ensure_ascii=False, indent=2)
+    def _call_claude_json(self, prompt: str, max_tokens: int = 500) -> dict:
+        """Claude API 호출 → JSON 파싱 (경량 호출용)"""
+        response = self.client.messages.create(
+            model=MODEL,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
         )
-        try:
-            return self._call_claude_json(prompt)
-        except Exception as e:
-            logger.error(f"등락 해설 생성 실패: {e}")
-            return rank_data
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1]
+            raw = raw.rsplit("```", 1)[0]
+        return json.loads(raw)
 
-    def generate_disclosure_summary(self, disclosure_data: dict) -> dict:
-        prompt = DISCLOSURE_SUMMARY_PROMPT.format(
-            disclosure_data=json.dumps(disclosure_data, ensure_ascii=False, indent=2)
-        )
+    def _extract_title_meta(self, content: str, today: str, report_type: str = "closing") -> dict:
+        """HTML 본문에서 제목+메타 설명 추출 (경량 호출)"""
+        content_preview = content[:500]
+        template = TITLE_META_PROMPT if report_type == "closing" else MORNING_TITLE_META_PROMPT
+        prompt = template.format(today=today, content_preview=content_preview)
         try:
-            return self._call_claude_json(prompt)
+            result = self._call_claude_json(prompt, max_tokens=500)
+            logger.info(f"제목/메타 추출 완료: {result.get('title', '')[:50]}")
+            return result
         except Exception as e:
-            logger.error(f"공시 요약 생성 실패: {e}")
-            return {"summaries": []}
+            logger.error(f"제목/메타 추출 실패: {e}")
+            fallback_title = (
+                f"{today} 주식 시장 마감 리포트"
+                if report_type == "closing"
+                else f"{today} 미국장 마감 브리핑"
+            )
+            return {"title": fallback_title, "meta_description": ""}
 
     # ── 최종 통합 생성 ────────────────────────────────
 
@@ -319,11 +298,18 @@ class BlogGenerator:
             disclaimer=DISCLAIMER,
         )
         try:
-            result = self._call_claude_json_with_system(
-                MORNING_SYSTEM, user_content, max_tokens=12000,
-            )
-            logger.info(f"아침 브리핑 생성 완료: {result.get('title', '')[:50]}")
-            return result
+            # 호출 1: HTML 본문 직접 생성
+            html_content = self._call_claude(MORNING_SYSTEM, user_content, max_tokens=12000)
+            logger.info(f"아침 브리핑 HTML 생성 완료 ({len(html_content)}자)")
+
+            # 호출 2: 제목+메타 추출 (경량)
+            title_meta = self._extract_title_meta(html_content, today, "morning")
+
+            return {
+                "title": title_meta.get("title", ""),
+                "content": html_content,
+                "meta_description": title_meta.get("meta_description", ""),
+            }
         except Exception as e:
             logger.error(f"아침 브리핑 생성 실패: {e}")
             return {"title": "", "content": "", "meta_description": ""}
@@ -331,9 +317,9 @@ class BlogGenerator:
     def generate_closing(
         self,
         kr_market: dict,
-        rank_commentary: dict,
+        rank_data: dict,
         themes: dict,
-        disclosure_summary: dict,
+        disclosures: dict,
         supply: dict,
         main_news: list[dict],
         world_news: list[dict] | None = None,
@@ -343,9 +329,9 @@ class BlogGenerator:
         user_content = CLOSING_USER.format(
             today=today,
             market_data=json.dumps(kr_market, ensure_ascii=False, indent=2, default=str),
-            rank_commentary=json.dumps(rank_commentary, ensure_ascii=False, indent=2),
+            rank_data=json.dumps(rank_data, ensure_ascii=False, indent=2),
             themes=json.dumps(themes, ensure_ascii=False, indent=2),
-            disclosure_summary=json.dumps(disclosure_summary, ensure_ascii=False, indent=2),
+            disclosures=json.dumps(disclosures, ensure_ascii=False, indent=2),
             supply=json.dumps(supply, ensure_ascii=False, indent=2),
             main_news=json.dumps(main_news[:20], ensure_ascii=False, indent=2),
             world_news=json.dumps(world_news[:20] if world_news else [], ensure_ascii=False, indent=2),
@@ -353,11 +339,18 @@ class BlogGenerator:
             disclaimer=DISCLAIMER,
         )
         try:
-            result = self._call_claude_json_with_system(
-                CLOSING_SYSTEM, user_content, max_tokens=12000,
-            )
-            logger.info(f"마감 리포트 생성 완료: {result.get('title', '')[:50]}")
-            return result
+            # 호출 1: HTML 본문 직접 생성 (등락 해설+공시 요약 포함)
+            html_content = self._call_claude(CLOSING_SYSTEM, user_content, max_tokens=12000)
+            logger.info(f"마감 리포트 HTML 생성 완료 ({len(html_content)}자)")
+
+            # 호출 2: 제목+메타 추출 (경량)
+            title_meta = self._extract_title_meta(html_content, today, "closing")
+
+            return {
+                "title": title_meta.get("title", ""),
+                "content": html_content,
+                "meta_description": title_meta.get("meta_description", ""),
+            }
         except Exception as e:
             logger.error(f"마감 리포트 생성 실패: {e}")
             return {"title": "", "content": "", "meta_description": ""}

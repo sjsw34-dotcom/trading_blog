@@ -139,18 +139,15 @@ def main():
     logger.info("[9/11] 예정 이벤트 조회")
     upcoming = db.get_upcoming_schedules(days=14)
 
-    # 10. Claude API 블로그 생성
+    # 10. Claude API 블로그 생성 (등락 해설+공시 요약을 블로그 프롬프트에 합침)
     logger.info("[10/11] 블로그 생성")
     blog_gen = BlogGenerator()
 
-    rank_commentary = blog_gen.generate_rank_commentary(rank_data)
-    disc_summary = blog_gen.generate_disclosure_summary(disclosures)
-
     blog = blog_gen.generate_closing(
         kr_market=kr_market or {},
-        rank_commentary=rank_commentary,
+        rank_data=rank_data,
         themes=themes,
-        disclosure_summary=disc_summary,
+        disclosures=disclosures,
         supply=supply,
         main_news=main_news,
         world_news=world_news,

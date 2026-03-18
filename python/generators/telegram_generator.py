@@ -12,7 +12,7 @@ load_dotenv(Path(__file__).parent.parent / "config" / ".env")
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-haiku-4-5-20251001"
 
 MORNING_TEMPLATE = """\
 아래 아침 브리핑 데이터를 텔레그램 메시지로 5줄 이내 요약해주세요.

@@ -205,7 +205,7 @@ class KISCollector:
             "FID_INPUT_PRICE_2": "0",
             "FID_VOL_CNT": "0",
             "FID_INPUT_DATE_1": "",
-            "FID_RANK_SORT_CLS_CODE": "0",
+            "FID_RANK_SORT_CLS_CODE": "1" if direction == "down" else "0",
             "FID_INPUT_CNT_1": "0",
             "FID_PRC_CLS_CODE": "0",
             "FID_RSFL_RATE1": "",
@@ -220,17 +220,26 @@ class KISCollector:
             return []
 
         result = []
-        for item in data["output"][:top_n]:
+        for item in data["output"][:top_n * 2]:  # 필터링 여유분 확보
             code = item.get("stck_shrn_iscd", "") or item.get("mksc_shrn_iscd", "")
+            change_rate = float(item.get("prdy_ctrt", 0))
+            # 하락 조회 시 change_rate < 0인 것만 (KIS API가 양수도 섞어 반환)
+            if direction == "down" and change_rate >= 0:
+                continue
             result.append(
                 {
                     "code": code,
                     "name": item.get("hts_kor_isnm", ""),
                     "close": int(item.get("stck_prpr", 0)),
-                    "change_rate": float(item.get("prdy_ctrt", 0)),
+                    "change_rate": change_rate,
                     "volume": int(item.get("acml_vol", 0)),
                 }
             )
+            if len(result) >= top_n:
+                break
+
+        if direction == "down" and not result:
+            logger.warning("하락 종목 필터 결과 0건 — KIS API 응답에 음수 등락률 없음")
         return result
 
     def get_kr_market_data(self) -> dict:
@@ -246,7 +255,7 @@ class KISCollector:
         time.sleep(0.2)
         volume_top = self.get_kr_volume_rank(SETTINGS["report"]["top_n_stocks"])
 
-        # 중복 제거 후 합침
+        # 중복 제거 후 합침 (하위 호환용 stocks 필드 유지)
         seen = set()
         stocks = []
         for s in gainers + losers + volume_top:
@@ -258,6 +267,8 @@ class KISCollector:
             "kospi": kospi,
             "kosdaq": kosdaq,
             "stocks": stocks,
+            "gainers": gainers,
+            "losers": losers,
         }
 
     # ── 미국 시세 ─────────────────────────────────────
