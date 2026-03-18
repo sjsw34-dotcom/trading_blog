@@ -1,0 +1,23 @@
+system:
+  timezone: "Asia/Seoul"
+
+kis:
+  base_url_real: "https://openapi.koreainvestment.com:9443"
+  us_stocks:
+    - {ticker: "AAPL", exchange: "NAS", name: "Apple"}
+    - {ticker: "MSFT", exchange: "NAS", name: "Microsoft"}
+    - {ticker: "GOOGL", exchange: "NAS", name: "Alphabet"}
+    - {ticker: "AMZN", exchange: "NAS", name: "Amazon"}
+    - {ticker: "TSLA", exchange: "NAS", name: "Tesla"}
+    - {ticker: "NVDA", exchange: "NAS", name: "NVIDIA"}
+    - {ticker: "META", exchange: "NAS", name: "Meta"}
+
+crawling:
+  delay_seconds: 1
+  max_news_per_stock: 5
+  news_days_range: 3
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+report:
+  top_n_stocks: 15
+  top_n_themes: 5

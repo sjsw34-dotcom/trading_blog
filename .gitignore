@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+.env.local
+python/config/.env
+python/config/token_cache.json
+__pycache__/
+*.pyc
+.claude/

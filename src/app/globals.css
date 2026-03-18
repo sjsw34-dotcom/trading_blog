@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #0a0a0f;
+  color: #e5e7eb;
+}
+
+/* 블로그 본문 HTML 스타일 */
+.report-content h1 {
+  @apply text-2xl font-bold text-white mt-8 mb-4;
+}
+.report-content h2 {
+  @apply text-xl font-bold text-primary mt-6 mb-3;
+}
+.report-content h3 {
+  @apply text-lg font-semibold text-gray-200 mt-4 mb-2;
+}
+.report-content p {
+  @apply mb-3 leading-relaxed text-gray-300;
+}
+.report-content ul,
+.report-content ol {
+  @apply mb-4 pl-6;
+}
+.report-content li {
+  @apply mb-1 text-gray-300;
+}
+.report-content a {
+  @apply text-accent hover:underline;
+}
+.report-content table {
+  @apply w-full mb-4 border-collapse;
+}
+.report-content th {
+  @apply text-left p-2 bg-surface text-gray-200 border border-border;
+}
+.report-content td {
+  @apply p-2 border border-border text-gray-300;
+}
+.report-content strong {
+  @apply text-white;
+}
+
+/* 한국 주식 컨벤션: 상승=빨강, 하락=파랑 */
+.report-content .stock-up,
+.report-content .price-up {
+  @apply text-red-500;
+}
+.report-content .stock-down,
+.report-content .price-down {
+  @apply text-blue-500;
+}
+
+/* 모바일 테이블 가로 스크롤 */
+.report-content .table-wrapper,
+.report-content div:has(> table) {
+  @apply overflow-x-auto -mx-4 px-4;
+}
+.report-content table {
+  @apply min-w-[600px];
+}
+
+/* 뉴스 링크 외부 아이콘 */
+.report-content a[target="_blank"]::after {
+  content: " ↗";
+  @apply text-xs opacity-50;
+}
