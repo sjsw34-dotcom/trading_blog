@@ -1,11 +1,11 @@
-"""뉴스 기반 테마 자동 분류 모듈 — Claude API + 테마 사전 활용"""
+"""뉴스 기반 테마 자동 분류 모듈 — OpenAI API + 테마 사전 활용"""
 
 import json
 import logging
 import os
 from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 import yaml
 from dotenv import load_dotenv
 
@@ -18,6 +18,7 @@ with open(_settings_path, "r", encoding="utf-8") as f:
     SETTINGS = yaml.safe_load(f)
 
 TOP_N_THEMES = SETTINGS["report"]["top_n_themes"]
+MODEL = "gpt-4o"
 
 THEME_PROMPT = """\
 당신은 한국 주식시장 테마 분류 전문가입니다.
@@ -50,11 +51,11 @@ JSON 형식으로만 응답 (마크다운 코드블록 없이):
 
 
 class ThemeAnalyzer:
-    """뉴스 기반 테마 자동 분류 — Claude API + 테마 사전"""
+    """뉴스 기반 테마 자동 분류 — OpenAI API + 테마 사전"""
 
     def __init__(self):
-        self.client = anthropic.Anthropic(
-            api_key=os.getenv("ANTHROPIC_API_KEY", "")
+        self.client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY", "")
         )
 
     def _build_stock_text(self, gainers: list[dict]) -> str:
@@ -93,7 +94,6 @@ class ThemeAnalyzer:
     def _build_recent_news_text(self, recent_news: list[dict]) -> str:
         if not recent_news:
             return "(최근 뉴스 없음)"
-        # 최근 7일 뉴스 중 주요 30건만
         lines = []
         for n in recent_news[:30]:
             lines.append(f"- [{n.get('date','')}] {n.get('title','')}")
@@ -105,14 +105,6 @@ class ThemeAnalyzer:
         existing_themes: list[dict] | None = None,
         recent_news_context: list[dict] | None = None,
     ) -> dict:
-        """
-        상승 종목 + 뉴스 + 테마 사전으로 테마 분류
-
-        Args:
-            gainers: rank_analyzer의 gainers 리스트
-            existing_themes: DB에서 조회한 기존 테마 사전
-            recent_news_context: 최근 7일 뉴스 아카이브
-        """
         if not gainers:
             logger.warning("테마 분석할 상승 종목 없음")
             return {"themes": []}
@@ -128,12 +120,12 @@ class ThemeAnalyzer:
         )
 
         try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = self.client.chat.completions.create(
+                model=MODEL,
                 max_tokens=3000,
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw = response.content[0].text.strip()
+            raw = response.choices[0].message.content.strip()
 
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[1]
@@ -152,7 +144,7 @@ class ThemeAnalyzer:
             return {"themes": themes[:TOP_N_THEMES]}
 
         except json.JSONDecodeError as e:
-            logger.error(f"Claude 응답 JSON 파싱 실패: {e}")
+            logger.error(f"응답 JSON 파싱 실패: {e}")
             return {"themes": []}
         except Exception as e:
             logger.error(f"테마 분석 실패: {e}")

@@ -39,18 +39,28 @@ function toDateString(val: unknown): string {
   return String(val).split("T")[0];
 }
 
-export async function getLatestReports(limit = 20): Promise<ReportSummary[]> {
+export async function getLatestReports(
+  limit = 20,
+  offset = 0,
+): Promise<ReportSummary[]> {
   const { rows } = await pool.query(
     `SELECT report_date, report_type, title, summary, meta_description
      FROM stock_reports
      ORDER BY report_date DESC, report_type DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $1 OFFSET $2`,
+    [limit, offset],
   );
   return (rows as ReportSummary[]).map((r) => ({
     ...r,
     report_date: toDateString(r.report_date),
   }));
+}
+
+export async function getReportCount(): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM stock_reports`,
+  );
+  return rows[0].count;
 }
 
 export async function getReport(

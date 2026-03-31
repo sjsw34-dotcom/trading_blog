@@ -59,6 +59,9 @@ def main():
         economy_news=economy_news,
     )
 
+    if not blog.get("content"):
+        raise RuntimeError("블로그 콘텐츠 생성 실패 — DB 저장 건너뜀")
+
     # 4. 텔레그램 요약 생성
     logger.info("[4/6] 텔레그램 요약 생성")
     tg_gen = TelegramGenerator()
@@ -89,7 +92,7 @@ def main():
 
     # 6. 텔레그램 발송 (async)
     logger.info("[6/6] 텔레그램 발송")
-    blog_url = f"https://your-domain.com/report/{today}"
+    blog_url = f"https://kjusik.com/report/{today}?type=morning"
     tg_pub = TelegramPublisher()
     sent = asyncio.run(tg_pub.send_message(tg_summary, blog_url=blog_url))
     if sent:

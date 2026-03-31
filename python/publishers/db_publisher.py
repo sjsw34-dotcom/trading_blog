@@ -111,6 +111,7 @@ DO UPDATE SET
     supply_data = EXCLUDED.supply_data,
     news_links = EXCLUDED.news_links,
     published_at = EXCLUDED.published_at
+WHERE EXCLUDED.content IS NOT NULL AND EXCLUDED.content != ''
 """
 
 
@@ -118,6 +119,9 @@ def _json_dumps(obj) -> str | None:
     if obj is None:
         return None
     return json.dumps(obj, ensure_ascii=False, default=str)
+
+
+from contextlib import contextmanager
 
 
 class DBPublisher:
@@ -129,17 +133,26 @@ class DBPublisher:
     def _connect(self):
         return psycopg2.connect(self.dsn)
 
-    def setup_tables(self):
-        """테이블 생성 (최초 1회)"""
+    @contextmanager
+    def _conn_cursor(self):
+        """커넥션 + 커서를 안전하게 관리하는 context manager"""
         conn = self._connect()
         try:
             cur = conn.cursor()
-            cur.execute(CREATE_TABLES_SQL)
-            conn.commit()
+            yield conn, cur
             cur.close()
-            logger.info("DB 테이블 설정 완료 (stock_reports, news_archive, stock_themes, theme_schedule)")
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
+
+    def setup_tables(self):
+        """테이블 생성 (최초 1회)"""
+        with self._conn_cursor() as (conn, cur):
+            cur.execute(CREATE_TABLES_SQL)
+            conn.commit()
+            logger.info("DB 테이블 설정 완료 (stock_reports, news_archive, stock_themes, theme_schedule)")
 
     def publish(self, report_data: dict):
         """
@@ -162,9 +175,7 @@ class DBPublisher:
                 "news_links": list | None,
             }
         """
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(UPSERT_SQL, (
                 report_data["date"],
                 report_data["type"],
@@ -182,27 +193,19 @@ class DBPublisher:
                 datetime.now(),
             ))
             conn.commit()
-            cur.close()
             logger.info(
                 f"DB 저장 완료: {report_data['date']} {report_data['type']}"
             )
-        finally:
-            conn.close()
 
     def mark_telegram_sent(self, report_date: str, report_type: str):
         """텔레그램 발송 완료 표시"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "UPDATE stock_reports SET telegram_sent = TRUE "
                 "WHERE report_date = %s AND report_type = %s",
                 (report_date, report_type),
             )
             conn.commit()
-            cur.close()
-        finally:
-            conn.close()
 
 
     # ── 뉴스 아카이브 ────────────────────────────────
@@ -212,9 +215,7 @@ class DBPublisher:
         if not news_list:
             return
         date = date or datetime.now().strftime("%Y-%m-%d")
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             for n in news_list:
                 cur.execute(
                     "INSERT INTO news_archive (collected_date, category, stock_code, title, url, press) "
@@ -224,16 +225,11 @@ class DBPublisher:
                      n.get("url", ""), n.get("press", "")),
                 )
             conn.commit()
-            cur.close()
             logger.info(f"뉴스 아카이브 저장: {category} {len(news_list)}건")
-        finally:
-            conn.close()
 
     def get_recent_news(self, days: int = 7, category: str | None = None) -> list[dict]:
         """최근 N일 뉴스 조회"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             if category:
                 cur.execute(
                     "SELECT collected_date, category, title, url, press "
@@ -249,30 +245,22 @@ class DBPublisher:
                     (days,),
                 )
             rows = cur.fetchall()
-            cur.close()
             return [
                 {"date": str(r[0]), "category": r[1], "title": r[2], "url": r[3], "press": r[4]}
                 for r in rows
             ]
-        finally:
-            conn.close()
 
     def cleanup_old_news(self, days: int = 7):
         """오래된 뉴스 삭제"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "DELETE FROM news_archive WHERE collected_date < CURRENT_DATE - %s",
                 (days,),
             )
             deleted = cur.rowcount
             conn.commit()
-            cur.close()
             if deleted:
                 logger.info(f"뉴스 아카이브 정리: {deleted}건 삭제")
-        finally:
-            conn.close()
 
     # ── 테마 사전 ──────────────────────────────────
 
@@ -292,12 +280,9 @@ class DBPublisher:
                                   "lead_stocks": ["두산에너빌리티"], "trigger": "..."}
             }
         """
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             today = datetime.now().strftime("%Y-%m-%d")
 
-            # 기존 테마 확인
             cur.execute(
                 "SELECT id, hit_count, history FROM stock_themes WHERE theme_name = %s",
                 (theme["name"],),
@@ -357,15 +342,10 @@ class DBPublisher:
                 logger.info(f"테마 신규 등록: {theme['name']}")
 
             conn.commit()
-            cur.close()
-        finally:
-            conn.close()
 
     def get_active_themes(self, limit: int = 50) -> list[dict]:
         """활성 테마 사전 조회 (Claude에 전달용)"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "SELECT theme_name, description, stocks, keywords, importance, "
                 "       status, first_seen, last_active, hit_count "
@@ -376,7 +356,6 @@ class DBPublisher:
                 (limit,),
             )
             rows = cur.fetchall()
-            cur.close()
             return [
                 {
                     "name": r[0], "description": r[1],
@@ -389,36 +368,27 @@ class DBPublisher:
                 }
                 for r in rows
             ]
-        finally:
-            conn.close()
 
     def get_all_themes_summary(self) -> list[dict]:
         """전체 테마 요약 (블로그 '테마 사전' 섹션용)"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "SELECT theme_name, description, importance, status, "
                 "       last_active, hit_count "
                 "FROM stock_themes ORDER BY importance DESC, last_active DESC"
             )
             rows = cur.fetchall()
-            cur.close()
             return [
                 {"name": r[0], "description": r[1], "importance": r[2],
                  "status": r[3], "last_active": str(r[4]) if r[4] else "", "hit_count": r[5]}
                 for r in rows
             ]
-        finally:
-            conn.close()
 
     # ── 테마 스케줄 ────────────────────────────────
 
     def save_schedule(self, event: dict):
         """테마 스케줄 저장"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "INSERT INTO theme_schedule "
                 "(event_date, event_text, related_themes, related_stocks, importance) "
@@ -432,15 +402,10 @@ class DBPublisher:
                 ),
             )
             conn.commit()
-            cur.close()
-        finally:
-            conn.close()
 
     def get_upcoming_schedules(self, days: int = 14) -> list[dict]:
         """향후 N일 이내 예정 이벤트 조회"""
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
+        with self._conn_cursor() as (conn, cur):
             cur.execute(
                 "SELECT event_date, event_text, related_themes, related_stocks, importance "
                 "FROM theme_schedule "
@@ -450,14 +415,11 @@ class DBPublisher:
                 (days,),
             )
             rows = cur.fetchall()
-            cur.close()
             return [
                 {"date": str(r[0]) if r[0] else "미정", "text": r[1],
                  "themes": r[2] or [], "stocks": r[3] or [], "importance": r[4]}
                 for r in rows
             ]
-        finally:
-            conn.close()
 
 
 if __name__ == "__main__":

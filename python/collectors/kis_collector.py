@@ -283,8 +283,10 @@ class KISCollector:
         if not data or "output" not in data:
             return None
         o = data["output"]
-        close = float(o.get("last", 0))
-        prev_close = float(o.get("base", 0))
+        close = float(o.get("last") or 0)
+        prev_close = float(o.get("base") or 0)
+        if not close:
+            return None
         change_rate = ((close - prev_close) / prev_close * 100) if prev_close else 0
         return {
             "ticker": ticker,
@@ -293,37 +295,72 @@ class KISCollector:
         }
 
     def get_us_index(self, symbol: str, exchange: str) -> dict | None:
-        """미국 지수 조회 (S&P500, 나스닥, 다우)"""
+        """미국 지수 조회 (S&P500, 나스닥, 다우)
+
+        해외지수 기간별시세 API(FHKST03030100) 사용.
+        DOW는 KIS 지수 API 미지원 → DIA ETF(AMS) 가격 × 100 으로 근사.
+        """
+        today = datetime.now().strftime("%Y%m%d")
+        yesterday = (datetime.now() - timedelta(days=4)).strftime("%Y%m%d")
+
         data = self._get(
-            "/uapi/overseas-price/v1/quotations/price",
-            "HHDFS00000300",
-            {"AUTH": "", "EXCD": exchange, "SYMB": symbol},
+            "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+            "FHKST03030100",
+            {
+                "FID_COND_MRKT_DIV_CODE": "N",
+                "FID_INPUT_ISCD": symbol,
+                "FID_INPUT_DATE_1": yesterday,
+                "FID_INPUT_DATE_2": today,
+                "FID_PERIOD_DIV_CODE": "D",
+            },
         )
-        if not data or "output" not in data:
+        if not data or "output1" not in data:
             return None
-        o = data["output"]
-        close = float(o.get("last", 0))
-        prev_close = float(o.get("base", 0))
-        change = ((close - prev_close) / prev_close * 100) if prev_close else 0
-        return {"close": close, "change": round(change, 2)}
+        o = data["output1"]
+        close = float(o.get("ovrs_nmix_prpr") or 0)
+        change = float(o.get("prdy_ctrt") or 0)
+        if not close:
+            # DOW 등 지수 API 미지원 시 ETF 폴백
+            if symbol == "DJI":
+                return self._get_dow_from_etf()
+            return None
+        return {"close": close, "change": change}
+
+    def _get_dow_from_etf(self) -> dict | None:
+        """DIA ETF 가격으로 다우지수 근사 (DIA ≈ DOW / 100)"""
+        price = self.get_us_stock_price("DIA", "AMS")
+        if not price:
+            return None
+        return {
+            "close": round(price["close"] * 100, 2),
+            "change": price["change_rate"],
+        }
 
     def get_usd_krw(self) -> float | None:
-        """USD/KRW 환율 조회"""
+        """USD/KRW 환율 조회 (해외지수 기간별시세 API)"""
+        today = datetime.now().strftime("%Y%m%d")
+        yesterday = (datetime.now() - timedelta(days=4)).strftime("%Y%m%d")
         data = self._get(
-            "/uapi/overseas-price/v1/quotations/price",
-            "HHDFS00000300",
-            {"AUTH": "", "EXCD": "NAS", "SYMB": "FX@KRW"},
+            "/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+            "FHKST03030100",
+            {
+                "FID_COND_MRKT_DIV_CODE": "X",
+                "FID_INPUT_ISCD": "FX@KRW",
+                "FID_INPUT_DATE_1": yesterday,
+                "FID_INPUT_DATE_2": today,
+                "FID_PERIOD_DIV_CODE": "D",
+            },
         )
-        if not data or "output" not in data:
+        if not data or "output1" not in data:
             return None
-        return float(data["output"].get("last", 0))
+        return float(data["output1"].get("ovrs_nmix_prpr") or 0) or None
 
     def get_us_market_data(self) -> dict:
         """미국 시장 전체 데이터 수집"""
         indices = {
-            "sp500": (".SPX", "NYS"),
-            "nasdaq": (".IXIC", "NAS"),
-            "dow": (".DJI", "NYS"),
+            "sp500": ("SPX", "N"),
+            "nasdaq": ("COMP", "N"),
+            "dow": ("DJI", "N"),
         }
         result = {}
         for key, (symbol, excd) in indices.items():
