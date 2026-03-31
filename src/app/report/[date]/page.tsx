@@ -2,7 +2,6 @@ import { getReport, getAdjacentReports } from "@/lib/db";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import sanitizeHtml from "sanitize-html";
-import AdlixAd from "./AdlixAd";
 
 const SITE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://kjusik.com";
 const SITE_NAME = "주식 리포트";
@@ -163,7 +162,7 @@ export default async function ReportPage({ params, searchParams }: PageProps) {
         {/* 본문 영역 */}
         <article className="flex-1 min-w-0">
           {/* 광고 고지 */}
-          <p className="mb-4 text-[13px] text-text-muted text-center">이 포스팅의 광고 클릭 시 애드릭스 커미션을 얻습니다.</p>
+          <p className="mb-4 text-[13px] text-text-muted text-center">이 포스팅은 제휴 마케팅 광고를 포함하고 있습니다.</p>
 
           {/* 헤더 */}
           <div className="mb-8 bg-white rounded-xl shadow-sm border border-border p-6">
@@ -203,14 +202,17 @@ export default async function ReportPage({ params, searchParams }: PageProps) {
               href="https://linkmoa.kr/click.php?m=agoda&a=A100693729&l=0000"
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-xl overflow-hidden hover:shadow-md transition-all"
+              className="block bg-gradient-to-r from-[#1a1a6c] via-[#b21f1f] to-[#fdbb2d] rounded-xl p-5 hover:shadow-lg transition-all"
             >
-              <img
-                src="/agoda.jpg"
-                alt="아고다 특가 호텔 예약"
-                className="w-full h-auto"
-                loading="eager"
-              />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white text-lg font-bold mb-1">✈️ 아고다 특가 호텔</p>
+                  <p className="text-white/80 text-sm">전 세계 숙소 최저가 비교 · 오늘만 특별 할인</p>
+                </div>
+                <span className="shrink-0 px-4 py-2 bg-white text-[#b21f1f] rounded-lg text-sm font-bold shadow-sm">
+                  예약하기 →
+                </span>
+              </div>
             </a>
           </div>
 
@@ -258,9 +260,6 @@ export default async function ReportPage({ params, searchParams }: PageProps) {
             );
           })()}
 
-          {/* CPA 광고 */}
-          <AdlixAd />
-
           {/* 모바일 사이드바 광고 (lg 이하에서만 표시) */}
           <div className="lg:hidden my-6 space-y-4">
             {/* 아고다 배너 (모바일) */}
@@ -268,14 +267,10 @@ export default async function ReportPage({ params, searchParams }: PageProps) {
               href="https://linkmoa.kr/click.php?m=agoda&a=A100693729&l=0000"
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-xl overflow-hidden hover:shadow-md transition-all"
+              className="block bg-gradient-to-r from-[#1a1a6c] via-[#b21f1f] to-[#fdbb2d] rounded-xl p-4 hover:shadow-md transition-all"
             >
-              <img
-                src="/agoda.jpg"
-                alt="아고다 특가 호텔 예약"
-                className="w-full h-auto rounded-xl"
-                loading="lazy"
-              />
+              <p className="text-white text-sm font-bold mb-1">✈️ 아고다 특가 호텔</p>
+              <p className="text-white/80 text-xs">전 세계 숙소 최저가 비교 · 오늘만 특별 할인</p>
             </a>
             <a
               href="https://linkmoa.kr/click.php?m=allcredit&a=A100693729&l=0000"

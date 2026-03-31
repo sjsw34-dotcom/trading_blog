@@ -80,7 +80,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       </div>
 
       {/* 제휴 배너 */}
-      <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="mb-8 space-y-4">
         <a
           href="https://linkmoa.kr/click.php?m=allcredit&a=A100693729&l=0000"
           target="_blank"
@@ -98,14 +98,17 @@ export default async function HomePage({ searchParams }: PageProps) {
           href="https://linkmoa.kr/click.php?m=agoda&a=A100693729&l=0000"
           target="_blank"
           rel="noopener noreferrer"
-          className="block rounded-xl overflow-hidden hover:shadow-md transition-all"
+          className="block bg-gradient-to-r from-[#1a1a6c] via-[#b21f1f] to-[#fdbb2d] rounded-xl p-5 hover:shadow-lg transition-all"
         >
-          <img
-            src="/agoda.jpg"
-            alt="아고다 특가 호텔 예약"
-            className="w-full h-auto"
-            loading="eager"
-          />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white text-lg font-bold mb-1">✈️ 아고다 특가 호텔</p>
+              <p className="text-white/80 text-sm">전 세계 숙소 최저가 비교 · 오늘만 특별 할인</p>
+            </div>
+            <span className="shrink-0 px-4 py-2 bg-white text-[#b21f1f] rounded-lg text-sm font-bold shadow-sm">
+              예약하기 →
+            </span>
+          </div>
         </a>
       </div>
 
