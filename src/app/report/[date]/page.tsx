@@ -162,7 +162,7 @@ export default async function ReportPage({ params, searchParams }: PageProps) {
         {/* 본문 영역 */}
         <article className="flex-1 min-w-0">
           {/* 광고 고지 */}
-          <p className="mb-4 text-[13px] text-text-muted text-center">이 포스팅은 제휴 마케팅 광고를 포함하고 있습니다.</p>
+          <p className="mb-4 text-[13px] text-text-muted text-center">이 포스팅은 제휴마케팅이 포함된 광고로 커미션을 지급 받습니다.</p>
 
           {/* 헤더 */}
           <div className="mb-8 bg-white rounded-xl shadow-sm border border-border p-6">
