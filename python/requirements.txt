@@ -3,6 +3,7 @@ beautifulsoup4>=4.12.0
 pykrx>=1.0.45
 psycopg2-binary>=2.9.9
 anthropic>=0.40.0
+openai>=1.0.0
 python-telegram-bot>=20.0
 python-dotenv>=1.0.0
 pyyaml>=6.0
