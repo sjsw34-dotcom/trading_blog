@@ -2,10 +2,10 @@ name: Daily Stock Report
 
 on:
   schedule:
-    # 아침 브리핑: KST 06:00 = UTC 21:00 (전날)
-    - cron: '0 21 * * 0-4'
-    # 마감 리포트: KST 15:35 = UTC 06:35
-    - cron: '35 6 * * 1-5'
+    # 아침 브리핑: KST 07:30 = UTC 22:30 (전날), 일~목 → 월~금 아침
+    - cron: '30 22 * * 0-4'
+    # 마감 리포트: KST 17:00 = UTC 08:00, 월~금
+    - cron: '0 8 * * 1-5'
   workflow_dispatch:
     inputs:
       report_type:
@@ -21,10 +21,11 @@ on:
 jobs:
   morning-report:
     if: >
-      github.event.schedule == '0 21 * * 0-4' ||
+      github.event.schedule == '30 22 * * 0-4' ||
       (github.event_name == 'workflow_dispatch' &&
        (github.event.inputs.report_type == 'morning' || github.event.inputs.report_type == 'both'))
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -44,8 +45,9 @@ jobs:
           KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
           KIS_HTS_ID: ${{ secrets.KIS_HTS_ID }}
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          TRADING_NEON_DATABASE_URL: ${{ secrets.TRADING_NEON_DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
@@ -54,10 +56,11 @@ jobs:
 
   closing-report:
     if: >
-      github.event.schedule == '35 6 * * 1-5' ||
+      github.event.schedule == '0 8 * * 1-5' ||
       (github.event_name == 'workflow_dispatch' &&
        (github.event.inputs.report_type == 'closing' || github.event.inputs.report_type == 'both'))
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -77,8 +80,9 @@ jobs:
           KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
           KIS_HTS_ID: ${{ secrets.KIS_HTS_ID }}
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          TRADING_NEON_DATABASE_URL: ${{ secrets.TRADING_NEON_DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
