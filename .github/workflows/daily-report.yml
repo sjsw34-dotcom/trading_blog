@@ -1,11 +1,12 @@
 name: Daily Stock Report
 
 on:
-  schedule:
-    # 아침 브리핑: KST 07:30 = UTC 22:30 (전날), 일~목 → 월~금 아침
-    - cron: '30 22 * * 0-4'
-    # 마감 리포트: KST 17:00 = UTC 08:00, 월~금
-    - cron: '0 8 * * 1-5'
+  # schedule 비활성화 — API 비용 절감 (2026-04-06)
+  # schedule:
+  #   # 아침 브리핑: KST 07:30 = UTC 22:30 (전날), 일~목 → 월~금 아침
+  #   - cron: '30 22 * * 0-4'
+  #   # 마감 리포트: KST 17:00 = UTC 08:00, 월~금
+  #   - cron: '0 8 * * 1-5'
   workflow_dispatch:
     inputs:
       report_type:
